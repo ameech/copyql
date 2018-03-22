@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dolfelt/copyql/cmd"
+	"github.com/ameech/copyql/cmd"
 	_ "github.com/go-sql-driver/mysql"
 )
 
