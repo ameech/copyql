@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
+	"github.com/gosuri/uiprogress"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -35,6 +37,8 @@ type ColumnValue struct {
 	Value interface{}
 }
 
+var wg sync.WaitGroup
+
 // GetData gathers all data relating to an entry point
 func (c *CopyQL) GetData(entry ColumnValue, columns Columns, relations Relations) TableData {
 	copy := &copyData{
@@ -51,18 +55,27 @@ func (c *CopyQL) GetData(entry ColumnValue, columns Columns, relations Relations
 
 // PutData loads data from JSON into a sql
 func (c *CopyQL) PutData(data TableData, columns Columns) []error {
+	uiprogress.Start()
+
 	errs := []error{}
 	copy := &copyData{
 		CopyQL:  c,
 		columns: columns,
 	}
+
 	for table, rows := range data {
-		fmt.Printf("Inserting %s\n", table)
-		err := copy.putTableData(table, rows)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		wg.Add(1)
+		go func(table string, rows []tableRow) {
+			defer wg.Done()
+			// fmt.Printf("Inserting %s\n", table)
+			err := copy.putTableData(table, rows)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}(table, rows)
 	}
+
+	wg.Wait()
 
 	return errs
 }
@@ -203,6 +216,9 @@ func columnMap(columns []Column) map[string]Column {
 }
 
 func (c *copyData) putTableData(table string, rows []tableRow) error {
+	bar := uiprogress.AddBar(len(rows)).AppendCompleted().PrependFunc(func(b *uiprogress.Bar) string {
+		return fmt.Sprintf("%-20s %9d/%-9d", table, b.Current(), len(rows))
+	})
 
 	temp := "INSERT INTO %s (`%s`) VALUES (%s)"
 
@@ -236,8 +252,9 @@ func (c *copyData) putTableData(table string, rows []tableRow) error {
 		}
 		stmt := fmt.Sprintf(temp, table, strings.Join(cols, "`,`"), strings.Join(binds, ","))
 		_, err = tx.Exec(stmt, vals...)
+		bar.Incr()
 		if err != nil {
-			fmt.Println(err)
+			// fmt.Println(err)
 		}
 	}
 	err = tx.Commit()

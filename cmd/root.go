@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dolfelt/copyql/data"
+	"github.com/ameech/copyql/data"
 	"github.com/fatih/color"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
